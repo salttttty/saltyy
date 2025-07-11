@@ -1,0 +1,280 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>메모리 카드 게임</title>
+<style>
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #f0f8ff;
+    margin: 0; padding: 20px;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  h1 {
+    margin-bottom: 10px;
+  }
+  #score {
+    font-size: 1.2em;
+    margin-bottom: 20px;
+  }
+  #game-board {
+    width: 440px;
+    display: grid;
+    grid-template-columns: repeat(5, 80px);
+    grid-gap: 10px;
+  }
+  .card {
+    width: 80px;
+    height: 110px;
+    background-color: #2e8b57;
+    border-radius: 10px;
+    cursor: pointer;
+    position: relative;
+    user-select: none;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    perspective: 600px;
+  }
+  .card.flip .card-inner {
+    transform: rotateY(180deg);
+  }
+  .card-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transition: transform 0.5s;
+    transform-style: preserve-3d;
+    border-radius: 10px;
+  }
+  .card-front, .card-back {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    backface-visibility: hidden;
+    border-radius: 10px;
+    display: flex; justify-content: center; align-items: center;
+    font-size: 40px;
+  }
+  .card-front {
+    background: #fff;
+    border: 2px solid #2e8b57;
+    color: #2e8b57;
+    transform: rotateY(180deg);
+  }
+  .card-back {
+    background: #2e8b57;
+    color: white;
+  }
+  #fireworks {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    pointer-events: none;
+    overflow: visible;
+    z-index: 9999;
+  }
+</style>
+</head>
+<body>
+
+
+<h1>메모리 카드 게임</h1>
+<div id="score">점수: 0</div>
+<div id="game-board"></div>
+<canvas id="fireworks"></canvas>
+
+
+<script>
+  const fruits = ['🍎','🍌','🍇','🍉','🍒'];
+  let cards = [];
+  let flippedCards = [];
+  let matchedCount = 0;
+  let score = 0;
+  let board = document.getElementById('game-board');
+  let scoreDisplay = document.getElementById('score');
+
+
+  function shuffle(array) {
+    for(let i = array.length-1; i>0; i--) {
+      const j = Math.floor(Math.random()*(i+1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+  }
+
+
+  function createCards() {
+    cards = [];
+    // 과일 2장씩
+    fruits.forEach(fruit => {
+      cards.push({fruit, id: Math.random()});
+      cards.push({fruit, id: Math.random()});
+    });
+    shuffle(cards);
+  }
+
+
+  function createCardElement(cardData, index) {
+    const card = document.createElement('div');
+    card.classList.add('card');
+    card.dataset.index = index;
+
+
+    card.innerHTML = `
+      <div class="card-inner">
+        <div class="card-front">${cardData.fruit}</div>
+        <div class="card-back">❓</div>
+      </div>
+    `;
+    card.addEventListener('click', onCardClick);
+    return card;
+  }
+
+
+  function onCardClick(e) {
+    const card = e.currentTarget;
+    const index = card.dataset.index;
+    if (flippedCards.length >= 2) return; // 이미 두장 뒤집음
+    if (card.classList.contains('flip')) return; // 이미 뒤집힌 카드 클릭 무시
+
+
+    card.classList.add('flip');
+    flippedCards.push({card, index});
+
+
+    if (flippedCards.length === 2) {
+      const [first, second] = flippedCards;
+      const card1 = cards[first.index];
+      const card2 = cards[second.index];
+
+
+      if (card1.fruit === card2.fruit) {
+        // 맞음
+        score += 10;
+        matchedCount += 2;
+        scoreDisplay.textContent = `점수: ${score}`;
+        flippedCards = [];
+
+
+        if(matchedCount === cards.length){
+          launchFireworks();
+          setTimeout(() => alert('모두 맞췄어요! 축하합니다!'), 500);
+        }
+      } else {
+        // 틀림, 1초뒤 다시 뒤집기
+        setTimeout(() => {
+          first.card.classList.remove('flip');
+          second.card.classList.remove('flip');
+          flippedCards = [];
+        }, 1000);
+      }
+    }
+  }
+
+
+  function init() {
+    matchedCount = 0;
+    score = 0;
+    scoreDisplay.textContent = `점수: 0`;
+    createCards();
+    board.innerHTML = '';
+    cards.forEach((card, idx) => {
+      board.appendChild(createCardElement(card, idx));
+    });
+  }
+
+
+  /* 폭죽 애니메이션 코드 */
+  const canvas = document.getElementById('fireworks');
+  const ctx = canvas.getContext('2d');
+  let cw, ch;
+  function resize() {
+    cw = window.innerWidth;
+    ch = window.innerHeight;
+    canvas.width = cw;
+    canvas.height = ch;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+
+  class Firework {
+    constructor(x, y) {
+      this.x = x;
+      this.y = y;
+      this.particles = [];
+      this.createParticles();
+    }
+    createParticles() {
+      for(let i=0; i<30; i++){
+        const angle = Math.random() * 2 * Math.PI;
+        const speed = Math.random() * 5 + 2;
+        this.particles.push({
+          x: this.x,
+          y: this.y,
+          vx: Math.cos(angle)*speed,
+          vy: Math.sin(angle)*speed,
+          alpha: 1,
+          life: 60,
+          color: `hsl(${Math.random()*360}, 100%, 60%)`
+        });
+      }
+    }
+    update() {
+      this.particles.forEach(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.1; // 중력 효과
+        p.alpha -= 1/60;
+        p.life--;
+      });
+      this.particles = this.particles.filter(p => p.life > 0);
+    }
+    draw(ctx) {
+      this.particles.forEach(p => {
+        ctx.fillStyle = `rgba(${hexToRgb(p.color)},${p.alpha})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3, 0, 2*Math.PI);
+        ctx.fill();
+      });
+    }
+    isDead() {
+      return this.particles.length === 0;
+    }
+  }
+
+
+  function hexToRgb(hsl) {
+    // 간단 변환, hsl을 rgb로 정확 변환하려면 복잡하지만 여기선 그냥 흰색 사용
+    // 폭죽 색깔은 fillStyle에 직접 hsl사용해도 되므로 수정:
+    return '255,255,255';
+  }
+
+
+  let fireworks = [];
+  function launchFireworks(){
+    for(let i=0; i<5; i++){
+      fireworks.push(new Firework(Math.random()*cw, Math.random()*ch/2 + ch/4));
+    }
+    animateFireworks();
+  }
+
+
+  function animateFireworks() {
+    ctx.clearRect(0, 0, cw, ch);
+    fireworks.forEach(fw => {
+      fw.update();
+      fw.draw(ctx);
+    });
+    fireworks = fireworks.filter(fw => !fw.isDead());
+    if(fireworks.length > 0){
+      requestAnimationFrame(animateFireworks);
+    }
+  }
+
+
+  init();
+</script>
+
+
+</body>
+</html>
